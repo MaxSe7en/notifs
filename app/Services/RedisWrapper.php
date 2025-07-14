@@ -12,34 +12,93 @@ use App\Exceptions\Console;
 
 class RedisWrapper
 {
-    private Client $redis;
+    private Client $redisClient;
     private int $maxAttempts;
+    private array $config;
+    /**
+     * Redis key prefixes
+     */
+    public const KEY_PREFIX = 'ws:';
+    public const CONNECTION_PREFIX = self::KEY_PREFIX . 'connection:';
+    public const QUEUE_PREFIX = self::KEY_PREFIX . 'notification_queue:';
+    public const SERVER_REGISTRY = self::KEY_PREFIX . 'servers';
+    public const USER_CONNECTION_MAP = self::KEY_PREFIX . 'user_connections';
+    public const FD_USER_MAP = self::KEY_PREFIX . 'fd_user_map';
 
     public function __construct(int $maxAttempts = 3)
     {
-        $this->redis = new Client();
+        $this->config = [
+            'cluster' => filter_var(getenv('REDIS_CLUSTER') ?: false, FILTER_VALIDATE_BOOLEAN),
+            'scheme' => getenv('REDIS_SCHEME') ?: 'tcp',
+            'host' => getenv('REDIS_HOST') ?: '127.0.0.1',
+            'port' => (int) (getenv('REDIS_PORT') ?: 6379),
+            'password' => getenv('REDIS_PASSWORD') ?: null,
+            'read_write_timeout' => 0,
+            'failover' => 'distribute',
+        ];
         $this->maxAttempts = $maxAttempts;
-
-        $this->connect();
+        $this->initializeClient();
     }
 
-    private function connect(): void
+    private function initializeClient(): void
     {
         try {
-            $this->redis->connect('127.0.0.1', 6379, 3.0); // 3s timeout
+            if ($this->config['cluster']) {
+                $this->redisClient = new Client([
+                    'cluster' => 'redis',
+                    'parameters' => [
+                        'password' => $this->config['password'],
+                    ],
+                    'nodes' => [
+
+                        $this->config['scheme'] . '://' . $this->config['host'] . ':' . $this->config['port'],
+                    ],
+                ]);
+            } else {
+                $this->redisClient = new Client([
+                    'scheme' => $this->config['scheme'],
+                    'host' => $this->config['host'],
+                    'port' => $this->config['port'],
+                    'password' => $this->config['password'],
+                    'read_write_timeout' => $this->config['read_write_timeout'],
+                ]);
+            }
+
+            // Test connection with actual command that verifies connectivity
+            $this->redisClient->time();
             Console::info("Connected to Redis ✅");
-        } catch (ConnectionException $e) {
-            Console::error("Failed to connect to Redis: {$e->getMessage()}");
+        } catch (\Exception $e) {
+            Console::error("Redis connection failed: " . $e->getMessage());
             throw $e;
         }
     }
 
+    public function getClient(): Client
+    {
+        try {
+            // Use a simple command that doesn't modify data to test connection
+            $this->redisClient->time();
+        } catch (\Exception $e) {
+            Console::warn("Redis connection lost, reconnecting... " . $e->getMessage());
+            $this->initializeClient();
+        }
+
+        return $this->redisClient;
+    }
+    /**
+     * Retry logic for Redis operations.
+     *
+     * @param callable $operation The Redis operation to perform.
+     * @param string $operationName Name of the operation for logging.
+     * @return mixed The result of the Redis operation.
+     * @throws ConnectionException If the operation fails after all retries.
+     */
     private function withRetry(callable $operation, string $operationName = 'unknown')
     {
         $attempts = 0;
         do {
             try {
-                $result = $operation();
+                $result = $operation($this->getClient());
                 if ($attempts > 0) {
                     Console::warn("Redis operation '{$operationName}' succeeded after {$attempts} retries.");
                 }
@@ -58,42 +117,58 @@ class RedisWrapper
     // Example wrappers
     public function hSet(string $hash, string $key, $value): bool
     {
-        return $this->withRetry(fn() => $this->redis->hSet($hash, $key, $value), "hSet($hash, $key)");
+        return $this->withRetry(fn() => $this->redisClient->hSet($hash, $key, $value), "hSet($hash, $key)");
     }
 
     public function hGet(string $hash, string $key)
     {
-        return $this->withRetry(fn() => $this->redis->hGet($hash, $key), "hGet($hash, $key)");
+        return $this->withRetry(fn() => $this->redisClient->hGet($hash, $key), "hGet($hash, $key)");
     }
 
     public function hDel(string $hash, array $keys): int
     {
-        return $this->withRetry(fn() => $this->redis->hDel($hash, ...$keys), "hDel($hash)");
+        return $this->withRetry(fn() => $this->redisClient->hDel($hash, ...$keys), "hDel($hash)");
     }
 
     public function hGetAll(string $hash): array
     {
-        return $this->withRetry(fn() => $this->redis->hGetAll($hash), "hGetAll($hash)");
+        return $this->withRetry(fn() => $this->redisClient->hGetAll($hash), "hGetAll($hash)");
     }
 
     public function publish(string $channel, string $message): int
     {
-        return $this->withRetry(fn() => $this->redis->publish($channel, $message), "publish($channel)");
+        return $this->withRetry(fn() => $this->redisClient->publish($channel, $message), "publish($channel)");
     }
 
+    /**
+     * Subscribe to Redis channels using pubSubLoop
+     * This is the correct way to handle pub/sub with callbacks in Predis
+     * Note: This method blocks and runs continuously
+     */
     public function subscribe(array $channels, callable $callback): void
     {
-        $this->withRetry(fn() => $this->redis->subscribe($channels, $callback), "subscribe()");
+        // Directly subscribe without retry wrapper
+        $pubSub = $this->redisClient->pubSubLoop();
+
+        $pubSub->subscribe(...$channels);
+
+        foreach ($pubSub as $message) {
+            if ($message->kind === 'message') {
+                $callback($this->redisClient, $message->channel, $message->payload);
+            }
+        }
+
+        $pubSub->unsubscribe();
     }
 
     public function lRange(string $key, int $start, int $stop): array
     {
-        return $this->withRetry(fn() => $this->redis->lRange($key, $start, $stop), "lRange($key)");
+        return $this->withRetry(fn() => $this->redisClient->lRange($key, $start, $stop), "lRange($key)");
     }
 
     public function del(string $key): int
     {
-        return $this->withRetry(fn() => $this->redis->del($key), "del($key)");
+        return $this->withRetry(fn() => $this->redisClient->del($key), "del($key)");
     }
 
     /**
@@ -104,6 +179,16 @@ class RedisWrapper
      */
     public function lLen(string $key): int
     {
-        return $this->redis->lLen($key);
+        return $this->withRetry(fn() => $this->redisClient->lLen($key), "lLen($key)");
+    }
+
+    public function set(string $key, $value): bool
+    {
+        return $this->withRetry(fn() => $this->redisClient->set($key, $value), "set($key)");
+    }
+
+    public function get(string $key)
+    {
+        return $this->withRetry(fn() => $this->redisClient->get($key), "get($key)");
     }
 }
