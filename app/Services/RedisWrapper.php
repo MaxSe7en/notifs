@@ -24,6 +24,7 @@ class RedisWrapper
     public const SERVER_REGISTRY = self::KEY_PREFIX . 'servers';
     public const USER_CONNECTION_MAP = self::KEY_PREFIX . 'user_connections';
     public const FD_USER_MAP = self::KEY_PREFIX . 'fd_user_map';
+    public const USER_FD = self::KEY_PREFIX . 'user_fd';
 
     public function __construct(int $maxAttempts = 3)
     {
@@ -99,6 +100,7 @@ class RedisWrapper
         do {
             try {
                 $result = $operation($this->getClient());
+                    Console::warn("Redis operation '{$operationName}' .");
                 if ($attempts > 0) {
                     Console::warn("Redis operation '{$operationName}' succeeded after {$attempts} retries.");
                 }
@@ -191,4 +193,56 @@ class RedisWrapper
     {
         return $this->withRetry(fn() => $this->redisClient->get($key), "get($key)");
     }
+
+    public function exists(string $key): bool
+    {
+        return $this->withRetry(fn() => $this->redisClient->exists($key), "exists($key)") > 0;
+    }
+    /**
+     * Push a value onto the end of a list.
+     *
+     * @param string $key
+     * @param mixed $value
+     * @return int The length of the list after the push operation.
+     */
+    public function rPush(string $key, $value): int
+    {
+        return $this->withRetry(fn() => $this->redisClient->rPush($key, $value), "rPush($key)");
+    }
+
+    /**
+     * Pop a value from the end of a list.
+     *
+     * @param string $key
+     * @return mixed The popped value, or null if the list is empty.
+     */
+    public function rPop(string $key)
+    {
+        return $this->withRetry(fn() => $this->redisClient->rPop($key), "rPop($key)");
+    }
+
+    // lpush
+    /**
+     * Push a value onto the start of a list.
+     *
+     * @param string $key
+     * @param mixed $value
+     * @return int The length of the list after the push operation.
+     */
+    public function lPush(string $key, $value): int
+    {
+        return $this->withRetry(fn() => $this->redisClient->lPush($key, $value), "lPush($key)");
+    }
+
+    /**
+     * Pop a value from the start of a list.
+     *
+     * @param string $key
+     * @return mixed The popped value, or null if the list is empty.
+     */
+    public function lPop(string $key)
+    {
+        return $this->withRetry(fn() => $this->redisClient->lPop($key), "lPop($key)");
+    }
+    
 }

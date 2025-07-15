@@ -41,9 +41,9 @@ class NotificationModel
     public function getUserNotices($userId)
     {
         $sql = "
-            SELECT n.msg_id, n.title, n.content, n.send_by, n.ms_type, n.created_at, n.ms_status 
+            SELECT n.msg_id, n.subject, n.message, n.send_by, n.ms_type, n.created_at, n.ms_status
             FROM notices n
-            LEFT JOIN notice_users nu ON n.msg_id = nu.notice_id AND nu.user_id = :userId
+            LEFT JOIN notice_users nu ON n.msg_id = nu.id AND nu.user_id = :userId
             WHERE n.ms_type = 'general' OR nu.user_id IS NOT NULL
             ORDER BY n.created_at DESC
         ";
@@ -53,9 +53,9 @@ class NotificationModel
     public function getAllPendingNotices()
     {
         $sql = "
-            SELECT n.msg_id, n.title, n.content, n.send_by, n.ms_type, n.created_at, n.ms_status, nu.user_id
+            SELECT n.msg_id, n.subject, n.message, n.send_by, n.ms_type, n.created_at, n.ms_status, nu.user_id
             FROM notices n
-            LEFT JOIN notice_users nu ON n.msg_id = nu.notice_id
+            LEFT JOIN notice_users nu ON n.msg_id = nu.id
             WHERE n.ms_status = 'Active'
             ORDER BY n.created_at DESC
         ";
