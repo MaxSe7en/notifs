@@ -15,26 +15,28 @@ class RedisService
     public function setUserFd(string $userId, int $fd): void
     {
         // First remove any existing mapping for this user
-        $existingFd = $this->redis->hGet(RedisWrapper::FD_USER_MAP, $userId);
+        $existingFd = $this->redis->get(RedisWrapper::USER_FD . $userId);
         if ($existingFd) {
-            $this->redis->hDel(RedisWrapper::USER_FD, [$existingFd]);
+            $this->redis->del(RedisWrapper::FD_USER_MAP . $existingFd);
         }
         if (json_decode($userId, true) !== null) {
             Console::warn("Attempted to store JSON-encoded userId: {$userId}. Converting to string.");
             $userId = (string) $userId;
         }
         Console::debug("Storing userId: {$userId} for FD: {$fd} in ws:user_fd");
-        $this->redis->hSet(RedisWrapper::FD_USER_MAP, $userId, $fd);
-        $this->redis->hSet(RedisWrapper::USER_FD, $fd, $userId);
+        $this->redis->set(RedisWrapper::FD_USER_MAP . $fd, $userId);
+        $this->redis->set(RedisWrapper::USER_FD . $userId, $fd);
     }
-
 
     public function getUserFd(string $userId): ?int
     {
-        $fd = $this->redis->hGet(RedisWrapper::USER_FD, $userId);
+        $fd = $this->redis->get(RedisWrapper::USER_FD . $userId);
+        $userFdKeys = $this->redis->keys(RedisWrapper::USER_FD . '*');
+        $userFdKeyValues = $this->redis->mget($userFdKeys);
         $uId = json_encode($userId);
         $_fd = json_encode($fd);
-        Console::debug("Fetching FD for user ID: {$uId} found in Redis: " . ($_fd === null ? 'null' : $_fd));
+        
+        Console::debug("Fetching FD for user ID: {$uId} found in Redis: " . $_fd ." keys". json_encode($userFdKeys) ." key val" .json_encode($userFdKeyValues). " fd=>". $_fd);
         if ($fd === null) {
             Console::log("No FD found for user ID {$userId}, cannot send notification.");
             return null;
@@ -49,7 +51,7 @@ class RedisService
 
     public function getUserIdByFd(int $fd): ?string
     {
-        $userId = $this->redis->hGet(RedisWrapper::USER_FD, $fd);
+        $userId = $this->redis->get(RedisWrapper::FD_USER_MAP . $fd);
         Console::debug("Fetching user ID for FD: {$fd} found in Redis: " . ($userId === null ? 'null' : $userId));
         if ($userId === null) {
             return null;
@@ -64,63 +66,65 @@ class RedisService
 
     public function removeUser(string $userId, int $fd): void
     {
-        $this->redis->hDel(RedisWrapper::FD_USER_MAP, [$userId ?: '']);
-        $this->redis->hDel(RedisWrapper::USER_FD, [$fd]);
+        $this->redis->del(RedisWrapper::FD_USER_MAP . $fd);
+        $this->redis->del(RedisWrapper::USER_FD . ($userId ?: ''));
     }
 
     public function removeUserByFd(int $fd): void
     {
-        $this->redis->hDel(RedisWrapper::USER_FD, [$fd]);
+        $this->redis->del(RedisWrapper::FD_USER_MAP . $fd);
     }
 
     public function removeUserByUserId(int $userId): void
     {
-        $this->redis->hDel(RedisWrapper::FD_USER_MAP, [(string) $userId]);
+        $this->redis->del(RedisWrapper::USER_FD . (string) $userId);
     }
 
     public function getAllUserFds(): array
     {
-        return $this->redis->hGetAll(RedisWrapper::FD_USER_MAP);
+        // Since we're not using hashes, we'll need to implement this differently
+        // This would require maintaining a separate set of all FDs or scanning keys
+        // For simplicity, we'll return an empty array as this functionality may need redesign
+        Console::warn("getAllUserFds not fully supported with non-hash implementation");
+        return [];
     }
 
     public function getAllUserFdsKeys(): array
     {
-        return array_keys($this->redis->hGetAll(RedisWrapper::USER_FD));
+        // Similar limitation as getAllUserFds
+        Console::warn("getAllUserFdsKeys not fully supported with non-hash implementation");
+        return [];
     }
 
     public function getAllFdsPairUserKeys(): array
     {
-        return array_keys($this->redis->hGetAll(RedisWrapper::FD_USER_MAP));
+        // Similar limitation as getAllUserFds
+        Console::warn("getAllFdsPairUserKeys not fully supported with non-hash implementation");
+        return [];
     }
 
     public function cleanupUserConnections(string $userId): void
     {
-        $fds = $this->redis->hGet(RedisWrapper::FD_USER_MAP, $userId);
-
-        if (is_array($fds)) {
-            foreach ($fds as $fd) {
-                $this->redis->hDel(RedisWrapper::USER_FD, [$fd]);
-            }
-            $this->redis->hDel(RedisWrapper::FD_USER_MAP, [$userId]);
-        } elseif (is_string($fds)) {
-            $this->redis->hDel(RedisWrapper::USER_FD, [$fds]);
-            $this->redis->hDel(RedisWrapper::FD_USER_MAP, [$userId]);
+        $fd = $this->redis->get(RedisWrapper::USER_FD . $userId);
+        if ($fd) {
+            $this->redis->del(RedisWrapper::FD_USER_MAP . $fd);
+            $this->redis->del(RedisWrapper::USER_FD . $userId);
         }
     }
 
     public function getNotificationList(string $userId): array
     {
-        return $this->redis->lRange("notifications:{$userId}", 0, -1);
+        return $this->redis->lRange(RedisWrapper::QUEUE_PREFIX . "{$userId}", 0, -1);
     }
 
     public function deleteNotificationList(string $userId): void
     {
-        $this->redis->del("notifications:{$userId}");
+        $this->redis->del(RedisWrapper::QUEUE_PREFIX . "{$userId}");
     }
 
     public function addNotification(string $userId, array $notification): void
     {
-        $this->redis->rPush("notifications:{$userId}", json_encode($notification));
+        $this->redis->rPush(RedisWrapper::QUEUE_PREFIX . "{$userId}", json_encode($notification));
     }
 
     public function publishNotification(array $notification): void
@@ -135,6 +139,6 @@ class RedisService
 
     public function getNotificationCount(string $userId): int
     {
-        return $this->redis->lLen("notifications:{$userId}");
+        return $this->redis->lLen(RedisWrapper::QUEUE_PREFIX . "{$userId}");
     }
 }
