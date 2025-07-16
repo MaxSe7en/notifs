@@ -100,12 +100,47 @@ class NotificationModel
                 AND notice_users.user_id = :userId
             ";
             $personalCount = DatabaseAccessors::select($personalSql, [$userId]);
-            // Console::log2('countssss ', $generalNote);
+            // //Console::log2('countssss ', $generalNote);
             return [
                 'system_notifications' => $totalCount['total'] ?? 0,
                 'general_notices' => $generalCount ?? 0,
                 'personal_notifications' => $personalCount['personal'] ?? 0,
                 'announcements' => $generalNote
+            ];
+        } catch (PDOException $e) {
+            //Console::log2('Notification count error: ', $e);
+            return [
+                'system_notifications' => 0,
+                'general_notices' => 0,
+                'personal_notifications' => 0
+            ];
+        }
+    }
+
+    public function getNotificationCountsOnly(string $userId)
+    {
+        try {
+            $totalSql = "SELECT COUNT(*) as total FROM notifications WHERE user_id = :userId AND read_status = 'unread'";
+
+            $totalCount = DatabaseAccessors::select($totalSql, [$userId]);
+
+            $generalSql = "SELECT COUNT(*) AS genCount FROM notices WHERE ms_type = 'general' AND ms_status = 'active'";
+            $generalCount = DatabaseAccessors::select($generalSql);
+            $personalSql = "
+                SELECT COUNT(*) as personal
+                FROM notices
+                LEFT JOIN notice_users ON notices.msg_id = notice_users.msg_id
+                WHERE notices.ms_type != 'general'
+                AND notices.ms_status = 'active'
+                AND notice_users.read_status = 'unread'
+                AND notice_users.user_id = :userId
+            ";
+            $personalCount = DatabaseAccessors::select($personalSql, [$userId]);
+            // //Console::log2('countssss ', $generalCount);
+            return [
+                'system_notifications' => $totalCount['total'] ?? 0,
+                'general_notices' => $generalCount['genCount'] ?? 0,
+                'personal_notifications' => $personalCount['personal'] ?? 0
             ];
         } catch (PDOException $e) {
             Console::log2('Notification count error: ', $e);

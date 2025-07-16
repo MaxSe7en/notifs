@@ -58,7 +58,7 @@ class RedisWrapper
             $this->redisClient = new PredisClient($this->connectionParameters);
             // Predis connects lazily, so we'll ping to ensure connection
             $this->redisClient->ping();
-            Console::info("Successfully connected to Redis at {$this->connectionParameters['host']}:{$this->connectionParameters['port']}/{$this->connectionParameters['database']}");
+            //Console::info("Successfully connected to Redis at {$this->connectionParameters['host']}:{$this->connectionParameters['port']}/{$this->connectionParameters['database']}");
         } catch (ConnectionException $e) {
             Console::error("Could not connect to Redis: " . $e->getMessage());
             // Optionally, you might want to log the error or throw a custom exception
@@ -78,7 +78,7 @@ class RedisWrapper
         // Predis connects lazily. If ping fails, it means the connection might have dropped.
         // We'll try to reconnect if the client is not in a connected state.
         if (!isset($this->redisClient) || !$this->isConnected()) {
-            Console::warn("Redis client not connected or connection dropped. Attempting to reconnect...");
+            //Console::warn("Redis client not connected or connection dropped. Attempting to reconnect...");
             $this->connect();
         }
         return $this->redisClient ?? null;
@@ -125,7 +125,7 @@ class RedisWrapper
                 return false;
             }
         }
-        Console::warn("Attempted to set key '{$key}' but Redis client is not available.");
+        //Console::warn("Attempted to set key '{$key}' but Redis client is not available.");
         return false;
     }
 
@@ -147,7 +147,7 @@ class RedisWrapper
                 return null;
             }
         }
-        Console::warn("Attempted to get key '{$key}' but Redis client is not available.");
+        //Console::warn("Attempted to get key '{$key}' but Redis client is not available.");
         return null;
     }
 
@@ -169,7 +169,7 @@ class RedisWrapper
                 return 0;
             }
         }
-        Console::warn("Attempted to delete keys but Redis client is not available.");
+        //Console::warn("Attempted to delete keys but Redis client is not available.");
         return 0;
     }
 
@@ -202,7 +202,7 @@ class RedisWrapper
                 return 0;
             }
         }
-        Console::warn("Attempted to check existence of keys but Redis client is not available.");
+        //Console::warn("Attempted to check existence of keys but Redis client is not available.");
         return 0;
     }
 
@@ -224,7 +224,7 @@ class RedisWrapper
                 return null;
             }
         }
-        Console::warn("Attempted to increment key '{$key}' but Redis client is not available.");
+        //Console::warn("Attempted to increment key '{$key}' but Redis client is not available.");
         return null;
     }
 
@@ -246,7 +246,7 @@ class RedisWrapper
                 return null;
             }
         }
-        Console::warn("Attempted to decrement key '{$key}' but Redis client is not available.");
+        //Console::warn("Attempted to decrement key '{$key}' but Redis client is not available.");
         return null;
     }
 
@@ -285,10 +285,10 @@ class RedisWrapper
             try {
                 return json_decode($jsonData, true, 512, JSON_THROW_ON_ERROR); // true for associative array
             } catch (JsonException $e) {
-                Console::error("Error deserializing JSON for key '{$key}': " . $e->getMessage());
+                //Console::error("Error deserializing JSON for key '{$key}': " . $e->getMessage());
                 return null;
             } catch (\Exception $e) {
-                Console::error("Unexpected error during JSON deserialization for key '{$key}': " . $e->getMessage());
+                //Console::error("Unexpected error during JSON deserialization for key '{$key}': " . $e->getMessage());
                 return null;
             }
         }
@@ -312,7 +312,7 @@ class RedisWrapper
                 return [];
             }
         }
-        Console::warn("Attempted to retrieve keys but Redis client is not available.");
+        //Console::warn("Attempted to retrieve keys but Redis client is not available.");
         return [];
     }
 
@@ -336,7 +336,7 @@ class RedisWrapper
                 return array_fill(0, count($keys), null);
             }
         }
-        Console::warn("Attempted to retrieve multiple keys but Redis client is not available.");
+        //Console::warn("Attempted to retrieve multiple keys but Redis client is not available.");
         return array_fill(0, count($keys), null); // Return array of nulls if not connected
     }
 
@@ -360,7 +360,7 @@ class RedisWrapper
                 return null;
             }
         }
-        Console::warn("Attempted to lPush to list '{$key}' but Redis client is not available.");
+        //Console::warn("Attempted to lPush to list '{$key}' but Redis client is not available.");
         return null;
     }
 
@@ -384,7 +384,7 @@ class RedisWrapper
                 return null;
             }
         }
-        Console::warn("Attempted to rPush to list '{$key}' but Redis client is not available.");
+        //Console::warn("Attempted to rPush to list '{$key}' but Redis client is not available.");
         return null;
     }
 
@@ -405,7 +405,7 @@ class RedisWrapper
                 return null;
             }
         }
-        Console::warn("Attempted to lPop from list '{$key}' but Redis client is not available.");
+        //Console::warn("Attempted to lPop from list '{$key}' but Redis client is not available.");
         return null;
     }
 
@@ -427,7 +427,7 @@ class RedisWrapper
                 return null;
             }
         }
-        Console::warn("Attempted to publish to channel '{$channel}' but Redis client is not available.");
+        //Console::warn("Attempted to publish to channel '{$channel}' but Redis client is not available.");
         return null;
     }
 
@@ -446,7 +446,7 @@ class RedisWrapper
     {
         $client = $this->getClient();
         if (!$client) {
-            Console::error("Cannot subscribe: Redis client not connected.");
+            //Console::error("Cannot subscribe: Redis client not connected.");
             return;
         }
 
@@ -454,16 +454,16 @@ class RedisWrapper
             $pubsub = $client->pubsub();
             $pubsub->subscribe($channels);
 
-            Console::info("Subscribing to channels: " . implode(', ', $channels) . ". Listening for messages...");
+            //Console::info("Subscribing to channels: " . implode(', ', $channels) . ". Listening for messages...");
 
             foreach ($pubsub as $message) {
                 switch ($message->kind) {
                     case 'subscribe':
-                        Console::info("Subscribed to channel: {$message->channel}");
+                        //Console::info("Subscribed to channel: {$message->channel}");
                         break;
                     case 'message':
                         // Invoke the provided callback with channel and message
-                        Console::log2("Received message on '{$message->channel}': ", $message->payload);
+                        //Console::log2("Received message on '{$message->channel}': ", $message->payload);
                         call_user_func($callback, $message->channel, $message->payload);
                         break;
                     case 'unsubscribe':

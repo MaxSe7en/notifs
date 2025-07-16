@@ -45,7 +45,7 @@ class NotificationService
                 return $this->sendPushNotification($userId, $message);
 
             default:
-                Console::error("Unknown notification type: $type");
+                //Console::error("Unknown notification type: $type");
                 return false;
         }
     }
@@ -69,7 +69,7 @@ class NotificationService
                         return $this->queueNotification($client, $userId, $message, $event);
                     }
                 } catch (Exception $e) {
-                    Console::error("WebSocket notification error: " . $e->getMessage());
+                    //Console::error("WebSocket notification error: " . $e->getMessage());
                     return false;
                 }
             },
@@ -122,11 +122,11 @@ class NotificationService
         });
 
         if ($result[0] > 0) { // Check if RPUSH was successful
-            Console::info("Queued notification for offline user: $userId");
+            //Console::info("Queued notification for offline user: $userId");
             return true;
         }
 
-        Console::error("Failed to queue notification for user: $userId");
+        //Console::error("Failed to queue notification for user: $userId");
         return false;
     }
 
@@ -156,7 +156,7 @@ class NotificationService
                     }
                 } catch (Exception $e) {
                     $results['failed'][] = $userId;
-                    Console::error("Bulk notification failed for user $userId: " . $e->getMessage());
+                    //Console::error("Bulk notification failed for user $userId: " . $e->getMessage());
                 }
             }
         }
@@ -175,7 +175,7 @@ class NotificationService
                 $user = DatabaseAccessors::select("SELECT email FROM users_test WHERE uid = ?", [$userId]);
 
                 if (!$user || empty($user['email'])) {
-                    Console::error("No email found for user: $userId");
+                    //Console::error("No email found for user: $userId");
                     return false;
                 }
 
@@ -193,12 +193,12 @@ class NotificationService
                 });
 
                 if ($result[0] > 0) {
-                    Console::info("Email queued for user: $userId");
+                    //Console::info("Email queued for user: $userId");
                     return true;
                 }
                 return false;
             } catch (Exception $e) {
-                Console::error("Email sending failed: " . $e->getMessage());
+                //Console::error("Email sending failed: " . $e->getMessage());
                 return false;
             }
         });
@@ -215,7 +215,7 @@ class NotificationService
                 $user = DatabaseAccessors::select("SELECT contact FROM users_test WHERE uid = ?", [$userId]);
 
                 if (!$user || empty($user['contact'])) {
-                    Console::error("No phone found for user: $userId");
+                    //Console::error("No phone found for user: $userId");
                     return false;
                 }
 
@@ -233,7 +233,7 @@ class NotificationService
 
                 return $result[0] > 0;
             } catch (Exception $e) {
-                Console::error("SMS sending failed: " . $e->getMessage());
+                //Console::error("SMS sending failed: " . $e->getMessage());
                 return false;
             }
         });
@@ -250,7 +250,7 @@ class NotificationService
                 $user = DatabaseAccessors::select("SELECT fcm_token FROM users_test WHERE uid = ?", [$userId]);
 
                 if (!$user || empty($user['fcm_token'])) {
-                    Console::error("No FCM token found for user: $userId");
+                    //Console::error("No FCM token found for user: $userId");
                     return false;
                 }
 
@@ -269,7 +269,7 @@ class NotificationService
 
                 return $result[0] > 0;
             } catch (Exception $e) {
-                Console::error("Push notification failed: " . $e->getMessage());
+                //Console::error("Push notification failed: " . $e->getMessage());
                 return false;
             }
         });
@@ -361,7 +361,7 @@ class NotificationService
                 }
             } while ($iterator > 0);
 
-            Console::info("Cleaned up $cleaned old notifications");
+            //Console::info("Cleaned up $cleaned old notifications");
             return $cleaned;
         });
     }
@@ -394,7 +394,7 @@ class NotificationService
                     }
                 }
             } catch (Exception $e) {
-                Console::error("PubSub error: " . $e->getMessage());
+                //Console::error("PubSub error: " . $e->getMessage());
                 $pubsub->close();
                 throw $e;
             }
@@ -404,7 +404,7 @@ class NotificationService
     private function handleUserConnection(int $userId): void
     {
         $this->redisService->executeWithRetry(function ($client) use ($userId) {
-            Console::info("User $userId connected - processing queued notifications");
+            //Console::info("User $userId connected - processing queued notifications");
 
             $queueKey = self::QUEUE_PREFIX . $userId;
             $notifications = $client->lrange($queueKey, 0, -1);
@@ -424,6 +424,6 @@ class NotificationService
 
     private function handleUserDisconnection(int $userId): void
     {
-        Console::info("User $userId disconnected");
+        //Console::info("User $userId disconnected");
     }
 }

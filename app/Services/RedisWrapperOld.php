@@ -37,9 +37,9 @@ class RedisWrapperOld
                 'persistent' => true, // Use persistent connections
             ]);
             $this->redisClient->ping(); // Test connection
-            Console::info("Connected to Redis ✅");
+            //Console::info("Connected to Redis ✅");
         } catch (\Exception $e) {
-            Console::error("Redis connection failed: " . $e->getMessage());
+            //Console::error("Redis connection failed: " . $e->getMessage());
             throw $e;
         }
     }
@@ -49,7 +49,7 @@ class RedisWrapperOld
         try {
             $this->redisClient->ping();
         } catch (\Exception $e) {
-            Console::warn("Redis connection lost, reconnecting: " . $e->getMessage());
+            //Console::warn("Redis connection lost, reconnecting: " . $e->getMessage());
             $this->initializeClient();
         }
         return $this->redisClient;
@@ -72,7 +72,7 @@ class RedisWrapperOld
             $response = $this->getClient()->set($key, $value);
             return $response->getPayload() === 'OK';
         } catch (\Exception $e) {
-            Console::error("Redis set failed for key {$key}: " . $e->getMessage());
+            //Console::error("Redis set failed for key {$key}: " . $e->getMessage());
             throw $e;
         }
     }
@@ -82,7 +82,7 @@ class RedisWrapperOld
         try {
             return $this->getClient()->get($key);
         } catch (\Exception $e) {
-            Console::error("Redis get failed for key {$key}: " . $e->getMessage());
+            //Console::error("Redis get failed for key {$key}: " . $e->getMessage());
             throw $e;
         }
     }
@@ -92,7 +92,7 @@ class RedisWrapperOld
         try {
             return $this->getClient()->keys($pattern);
         } catch (\Exception $e) {
-            Console::error("Redis keys failed for pattern {$pattern}: " . $e->getMessage());
+            //Console::error("Redis keys failed for pattern {$pattern}: " . $e->getMessage());
             throw $e;
         }
     }
@@ -101,12 +101,12 @@ class RedisWrapperOld
     {
         try {
             if (empty($keys)) {
-                Console::warn("mGet called with empty keys array, returning empty result.");
+                //Console::warn("mGet called with empty keys array, returning empty result.");
                 return [];
             }
             return $this->getClient()->mget($keys);
         } catch (\Exception $e) {
-            Console::error("Redis mGet failed for keys: " . implode(', ', $keys) . ": " . $e->getMessage());
+            //Console::error("Redis mGet failed for keys: " . implode(', ', $keys) . ": " . $e->getMessage());
             throw $e;
         }
     }
@@ -115,10 +115,10 @@ class RedisWrapperOld
     {
         try {
             // $response = $this->getClient()->del($key);
-            // Console::log("Redis del response for key {$key}: " . json_encode($response.getPayload()));
+            // //Console::log("Redis del response for key {$key}: " . json_encode($response.getPayload()));
             return $this->getClient()->del($key);
         } catch (\Exception $e) {
-            Console::error("Redis del failed for key {$key}: " . $e->getMessage());
+            //Console::error("Redis del failed for key {$key}: " . $e->getMessage());
             throw $e;
         }
     }
@@ -128,7 +128,7 @@ class RedisWrapperOld
         try {
             return $this->getClient()->exists($key) > 0;
         } catch (\Exception $e) {
-            Console::error("Redis exists failed for key {$key}: " . $e->getMessage());
+            //Console::error("Redis exists failed for key {$key}: " . $e->getMessage());
             throw $e;
         }
     }
@@ -138,7 +138,7 @@ class RedisWrapperOld
         try {
             return $this->getClient()->lpush($key, $value);
         } catch (\Exception $e) {
-            Console::error("Redis lPush failed for key {$key}: " . $e->getMessage());
+            //Console::error("Redis lPush failed for key {$key}: " . $e->getMessage());
             throw $e;
         }
     }
@@ -147,14 +147,14 @@ class RedisWrapperOld
     {
         try {
             $response = $this->getClient()->rpush($key, $value);
-            Console::log("Redis rPush response for key {$key}: " . json_encode($response));
+            //Console::log("Redis rPush response for key {$key}: " . json_encode($response));
             if ($response === null) {
-                Console::error("Redis rPush returned null for key {$key}");
+                //Console::error("Redis rPush returned null for key {$key}");
                 throw new \RuntimeException("Redis rPush failed for key {$key}");
             }
             return $response;
         } catch (\Exception $e) {
-            Console::error("Redis rPush failed for key {$key}: " . $e->getMessage());
+            //Console::error("Redis rPush failed for key {$key}: " . $e->getMessage());
             throw $e;
         }
     }
@@ -164,7 +164,7 @@ class RedisWrapperOld
         try {
             return $this->getClient()->lpop($key);
         } catch (\Exception $e) {
-            Console::error("Redis lPop failed for key {$key}: " . $e->getMessage());
+            //Console::error("Redis lPop failed for key {$key}: " . $e->getMessage());
             throw $e;
         }
     }
@@ -174,7 +174,7 @@ class RedisWrapperOld
         try {
             return $this->getClient()->rpop($key);
         } catch (\Exception $e) {
-            Console::error("Redis rPop failed for key {$key}: " . $e->getMessage());
+            //Console::error("Redis rPop failed for key {$key}: " . $e->getMessage());
             throw $e;
         }
     }
@@ -184,7 +184,7 @@ class RedisWrapperOld
         try {
             return $this->getClient()->lrange($key, $start, $stop);
         } catch (\Exception $e) {
-            Console::error("Redis lRange failed for key {$key}: " . $e->getMessage());
+            //Console::error("Redis lRange failed for key {$key}: " . $e->getMessage());
             throw $e;
         }
     }
@@ -194,7 +194,7 @@ class RedisWrapperOld
         try {
             return $this->getClient()->llen($key);
         } catch (\Exception $e) {
-            Console::error("Redis lLen failed for key {$key}: " . $e->getMessage());
+            //Console::error("Redis lLen failed for key {$key}: " . $e->getMessage());
             throw $e;
         }
     }
@@ -204,7 +204,7 @@ class RedisWrapperOld
         try {
             return $this->getClient()->publish($channel, $message);
         } catch (\Exception $e) {
-            Console::error("Redis publish failed for channel {$channel}: " . $e->getMessage());
+            //Console::error("Redis publish failed for channel {$channel}: " . $e->getMessage());
             throw $e;
         }
     }
@@ -221,7 +221,7 @@ class RedisWrapperOld
             }
             $pubSub->unsubscribe();
         } catch (\Exception $e) {
-            Console::error("Redis subscribe failed: " . $e->getMessage());
+            //Console::error("Redis subscribe failed: " . $e->getMessage());
             throw $e;
         }
     }

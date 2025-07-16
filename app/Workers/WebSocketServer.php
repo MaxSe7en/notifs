@@ -75,15 +75,15 @@ class WebSocketServer
     public function start()
     {
         $host = $this->config['host'] ?? '0.0.0.0';
-        $port = $this->config['port'] ?? 9502;
+        $port = $this->config['port'] ?? 9503;
 
         $useSSL = $this->config['ssl_cert_file'] && $this->config['ssl_key_file'];
 
         if ($useSSL) {
-            Console::info("Starting WebSocket server with SSL");
+            //Console::info("Starting WebSocket server with SSL");
             $this->server = new Server($host, $port, SWOOLE_PROCESS, SWOOLE_SOCK_TCP | SWOOLE_SSL);
         } else {
-            Console::warn("Starting WebSocket server without SSL (certificates not found)");
+            //Console::warn("Starting WebSocket server without SSL (certificates not found)");
             $this->server = new Server($host, $port, SWOOLE_PROCESS, SWOOLE_SOCK_TCP);
             unset(
                 $this->config['ssl_cert_file'],
@@ -98,7 +98,7 @@ class WebSocketServer
 
         $this->server->set($serverConfig);
 
-        // $this->server->addProcess($this->getRedisSubscriberProcess());
+        $this->server->addProcess($this->getRedisSubscriberProcess());
 
         $this->registerEventHandlers();
 
@@ -143,7 +143,7 @@ class WebSocketServer
 
         $existingUserId = $this->redis->getUserIdByFd($fd);
         if ($existingUserId) {
-            Console::warn("FD {$fd} reused, overwriting old userId: {$existingUserId}");
+            //Console::warn("FD {$fd} reused, overwriting old userId: {$existingUserId}");
             $this->redis->removeUserByFd($fd);
         }
         $this->redis->cleanupUserConnections($userId);
@@ -195,21 +195,21 @@ class WebSocketServer
 
     public function onTask(Server $server, int $taskId, int $fromId, $data)
     {
-        echo "Task {$taskId} received from worker {$fromId} with data: " . json_encode($data). "\n";
+        echo "Task {$taskId} received from worker {$fromId} with data: " . json_encode($data) . "\n";
         try {
             switch ($data['type'] ?? '') {
                 case 'process_queued_notifications':
-                    Console::info("Processing queued notifications");
+                    //Console::info("Processing queued notifications");
                     $this->processQueuedNotifications();
                     break;
 
                 case 'process_pending_db_notifications':
-                    Console::info("Processing pending notifications from database");
+                    //Console::info("Processing pending notifications from database");
                     $this->processPendingNotifications();
                     break;
 
                 case 'send_notification':
-                    Console::info("Sending notification for user {$data['user_id']}");
+                    //Console::info("Sending notification for user {$data['user_id']}");
                     $message = trim($data['message'] ?? '');
                     if ($message !== '') {
                         $this->sendDirectNotification(
@@ -222,7 +222,7 @@ class WebSocketServer
 
                 case 'mark_notification_read':
                     if (isset($data['user_id'], $data['notification_id'])) {
-                        Console::info("Marking notification {$data['notification_id']} as read for user {$data['user_id']}");
+                        //Console::info("Marking notification {$data['notification_id']} as read for user {$data['user_id']}");
                         $this->notificationModel->markAsRead((int) $data['notification_id'], (int) $data['user_id']);
                     }
                     break;
@@ -248,29 +248,29 @@ class WebSocketServer
             if ($this->isConnectionActive($existingFd)) {
                 try {
                     $this->server->disconnect($existingFd, 4003, "New connection established");
-                    Console::info("Disconnected old FD {$existingFd} for user {$userId}");
+                    //Console::info("Disconnected old FD {$existingFd} for user {$userId}");
                 } catch (\Exception $e) {
-                    Console::warn("Failed to disconnect old FD {$existingFd}: " . $e->getMessage());
+                    //Console::warn("Failed to disconnect old FD {$existingFd}: " . $e->getMessage());
                 }
             }
             $this->redis->removeUserByFd($existingFd);
         }
 
         $this->redis->setUserFd($userId, $newFd);
-        Console::info("Established new connection FD {$newFd} for user {$userId}");
+        //Console::info("Established new connection FD {$newFd} for user {$userId}");
     }
 
     private function checkAndSendNewNotifications()
     {
         // Note: This method is commented out in the original code
         // Since getAllUserFds is not supported, this would need a different implementation
-        Console::warn("checkAndSendNewNotifications not supported with non-hash Redis");
+        //Console::warn("checkAndSendNewNotifications not supported with non-hash Redis");
     }
 
     public function getRedisSubscriberProcess(): Process
     {
         return new Process(function (Process $process) {
-            Console::info("[Redis Process] Starting Redis subscriber process");
+            //Console::info("[Redis Process] Starting Redis subscriber process");
 
             $redis = new RedisWrapper();
             $server = $this->server; // Pass the server instance explicitly
@@ -279,12 +279,12 @@ class WebSocketServer
             while (true) {
                 try {
                     $redis->subscribe([RedisWrapper::QUEUE_PREFIX], function ($redisClient, $channel, $message) use ($server) {
-                        Console::info("[Redis] Message from channel {$channel}: {$message}");
+                        //Console::info("[Redis] Message from channel {$channel}: {$message}");
 
                         $payload = json_decode($message, true);
 
                         if (!$payload || !isset($payload['userId'], $payload['message'])) {
-                            Console::error("[Redis] Invalid message format");
+                            //Console::error("[Redis] Invalid message format");
                             return;
                         }
 
@@ -295,14 +295,14 @@ class WebSocketServer
 
                         if ($fd && $server->isEstablished((int) $fd)) {
                             $server->push((int) $fd, $msg);
-                            Console::info("[WebSocket] Pushed to FD {$fd}");
+                            //Console::info("[WebSocket] Pushed to FD {$fd}");
                         } else {
-                            Console::warn("[WebSocket] FD for user {$userId} not connected");
+                            //Console::warn("[WebSocket] FD for user {$userId} not connected");
                         }
                     });
                 } catch (\Exception $e) {
                     Console::error("[Redis Process] Subscribe failed: " . $e->getMessage());
-                    Console::warn("[Redis Process] Reconnecting in 5 seconds...");
+                    //Console::warn("[Redis Process] Reconnecting in 5 seconds...");
                     sleep(5); // Wait before retrying
                     $redis = new RedisWrapper(); // Reinitialize Redis client
                 }
@@ -312,7 +312,7 @@ class WebSocketServer
 
     private function handleMessage(array $data, int $fd, int $userId): void
     {
-        Console::log("Received message from user {$userId}: " . json_encode($data));
+        //Console::log("Received message from user {$userId}: " . json_encode($data));
         switch ($data['action'] ?? '') {
             case 'ping':
                 $this->server->push($fd, json_encode([
@@ -358,9 +358,9 @@ class WebSocketServer
     private function sendDirectNotification(int $userId, string $message, string $event = 'notification'): bool
     {
         $fd = $this->redis->getUserFd((string) $userId);
-        Console::debug("Fetching FD in sendDirectNotification fxn for user ID: {$userId} found in Redis " . json_encode($fd));
+        //Console::debug("Fetching FD in sendDirectNotification fxn for user ID: {$userId} found in Redis " . json_encode($fd));
         if (!$fd) {
-            Console::warn("No FD found for user ID {$userId}, cannot send notification.");
+            //Console::warn("No FD found for user ID {$userId}, cannot send notification.");
             if (!empty($message)) {
                 $this->redis->addNotification((string) $userId, [
                     'user_id' => $userId,
@@ -368,7 +368,7 @@ class WebSocketServer
                     'event' => $event,
                     'timestamp' => time()
                 ]);
-                Console::info("User {$userId} not connected, notification queued.");
+                //Console::info("User {$userId} not connected, notification queued.");
             }
             return false;
         }
@@ -380,24 +380,26 @@ class WebSocketServer
                     'event' => $event,
                     'timestamp' => time()
                 ]);
-                Console::info("User {$userId} not connected, notification queued.");
+                //Console::info("User {$userId} not connected, notification queued.");
             }
             return false;
         }
 
         try {
+            $counts = $this->notificationModel->getNotificationCountsOnly((string) $userId);
             $payload = json_encode([
                 'type' => 'notification',
                 'event' => $event,
                 'message' => $message,
+                'count' => $counts,
                 'timestamp' => time()
             ]);
 
             $pushed = $this->server->push($fd, $payload);
             if ($pushed) {
-                Console::info("Sent direct notification to User {$userId} (fd: {$fd}).");
+                //Console::info("Sent direct notification to User {$userId} (fd: {$fd}).");
             } else {
-                Console::warn("Failed to push notification to fd {$fd} for User {$userId}.");
+                //Console::warn("Failed to push notification to fd {$fd} for User {$userId}.");
             }
             return $pushed;
         } catch (\Exception $e) {
@@ -413,15 +415,15 @@ class WebSocketServer
             if (empty($pending)) {
                 return;
             }
-            Console::info("Processing " . count($pending) . " pending notifications from database."." found in DB: " . json_encode($pending));
+            //Console::info("Processing " . count($pending) . " pending notifications from database." . " found in DB: " . json_encode($pending));
 
             foreach ($pending as $notification) {
                 if (empty($notification['user_id'])) {
-                    Console::warn("Skipping notification with missing user_id: " . json_encode($notification));
+                    //Console::warn("Skipping notification with missing user_id: " . json_encode($notification));
                     continue;
                 }
                 if (empty($notification['message'])) {
-                    Console::warn("Skipping notification with missing message for user {$notification['user_id']}");
+                    //Console::warn("Skipping notification with missing message for user {$notification['user_id']}");
                     continue;
                 }
 
@@ -440,9 +442,9 @@ class WebSocketServer
                     [$notification['id']]
                 );
                 if ($sent) {
-                    Console::info("Processed and sent DB notification ID {$notification['id']} to user {$userId}.");
+                    //Console::info("Processed and sent DB notification ID {$notification['id']} to user {$userId}.");
                 } else {
-                    Console::info("Processed DB notification ID {$notification['id']} for user {$userId}, queued for later.");
+                    //Console::info("Processed DB notification ID {$notification['id']} for user {$userId}, queued for later.");
                 }
             }
         } catch (\Exception $e) {
@@ -474,7 +476,8 @@ class WebSocketServer
     {
         // Note: This method assumes notifications are stored per user
         // Since getAllUserFds is not supported, you might need to maintain a set of user IDs
-        Console::warn("processQueuedNotifications not fully supported without user enumeration");
+        //Console::warn("processQueuedNotifications not fully supported without user enumeration");
+
     }
 
     private function validateAndGetUserId($request): int
@@ -485,14 +488,15 @@ class WebSocketServer
         }
 
         $userId = (int) $query['userId'];
-        Console::info("Validating user ID: {$userId}");
+        //Console::info("Validating user ID: {$userId}");
         return $userId;
     }
 
     private function isValidConnection(int $fd): bool
     {
-        return isset($this->heartbeatTimers[$fd]) && $this->server->isEstablished($fd)
-            && Timer::exists($this->heartbeatTimers[$fd]) && $this->redis->getUserIdByFd($fd) !== null;
+        return $this->server->isEstablished($fd);
+        // return isset($this->heartbeatTimers[$fd]) && $this->server->isEstablished($fd)
+        //     && Timer::exists($this->heartbeatTimers[$fd]) && $this->redis->getUserIdByFd($fd) !== null;
     }
 
     private function isConnectionActive(int $fd): bool
