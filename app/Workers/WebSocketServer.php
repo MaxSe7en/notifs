@@ -75,7 +75,7 @@ class WebSocketServer
     public function start()
     {
         $host = $this->config['host'] ?? '0.0.0.0';
-        $port = $this->config['port'] ?? 9503;
+        $port = $this->config['port'] ?? 9502;
 
         $useSSL = $this->config['ssl_cert_file'] && $this->config['ssl_key_file'];
 
