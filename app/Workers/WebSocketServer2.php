@@ -12,7 +12,7 @@ use Swoole\Timer;
 use App\Services\RedisService;
 use App\Models\NotificationModel;
 
-class WebSocketServer
+class WebSocketServer2
 {
     private Server $server;
     private RedisService $redis;
@@ -24,10 +24,10 @@ class WebSocketServer
 
     public function __construct(array $config = [])
     {
-        $this->serverId = gethostname() . ':' . ($config['port'] ?? 9502);
+        $this->serverId = gethostname() . ':' . ($config['port'] ?? 9503);
         $this->config2 = [
             'host' => '0.0.0.0',
-            'port' => 9502
+            'port' => 9503
         ];
 
         $this->config = array_merge([
@@ -75,7 +75,7 @@ class WebSocketServer
     public function start()
     {
         $host = $this->config['host'] ?? '0.0.0.0';
-        $port = $this->config['port'] ?? 9502;
+        $port = $this->config['port'] ?? 9503;
 
         $useSSL = $this->config['ssl_cert_file'] && $this->config['ssl_key_file'];
 
@@ -131,12 +131,42 @@ class WebSocketServer
         }
     }
 
+    public function onOpenOld(Server $server, Request $request)
+    {
+        $fd = $request->fd;
+
+        $userId = $this->validateAndGetUserId($request);
+        if (!$userId) {
+            Console::log("FD {$fd} missing, user: {$userId}");
+            $server->disconnect($fd, 4000, "Missing userId");
+            return;
+        }
+
+        $existingUserId = $this->redis->getUserIdByFd($fd);
+        if ($existingUserId) {
+            //Console::warn("FD {$fd} reused, overwriting old userId: {$existingUserId}");
+            $this->redis->removeUserByFd($fd);
+        }
+        $this->redis->cleanupUserConnections($userId);
+        echo "User {$userId} connected with FD {$fd}\n";
+        $this->setUserFd($userId, $fd);
+
+        $this->heartbeatTimers[$fd] = Timer::after(300_000, function () use ($fd, $userId, $server) {
+            if ($server->isEstablished($fd)) {
+                $server->disconnect($fd, 4001, "Inactive too long");
+                echo "[Inactivity] Auto-closed FD {$fd} (user {$userId}) due to timeout\n";
+                $this->redis->removeUser($userId, $fd);
+            }
+        });
+        $this->sendInitialData($userId, $fd);
+    }
+
     public function onOpen(Server $server, Request $request)
     {
         $fd = $request->fd;
         $userId = $this->validateAndGetUserId($request);
         if (!$userId) {
-            // Console::log("FD {$fd} missing, user: {$userId}");
+            Console::log("FD {$fd} missing, user: {$userId}");
             $server->disconnect($fd, 4000, "Missing userId");
             return;
         }
@@ -148,11 +178,32 @@ class WebSocketServer
             if ($server->isEstablished($fd)) {
                 $server->disconnect($fd, 4001, "Inactive too long");
                 $this->redis->removeUser($userId, $fd);
-                // Console::info("Auto-closed FD {$fd} (user {$userId}) due to timeout");
+                Console::info("Auto-closed FD {$fd} (user {$userId}) due to timeout");
             }
         });
         $this->sendInitialData($userId, $fd);
-        // Console::info("User {$userId} connected with FD {$fd}, conn_id {$connectionId}");
+        Console::info("User {$userId} connected with FD {$fd}, conn_id {$connectionId}");
+    }
+
+    public function onMessageOld(Server $server, Frame $frame)
+    {
+        $data = json_decode($frame->data, true);
+        if (!$data) {
+            throw new \InvalidArgumentException("Invalid JSON format");
+        }
+        echo "Received message from FD {$frame->fd}: {$frame->data}\n";
+        if (isset($this->heartbeatTimers[$frame->fd])) {
+            Timer::clear($this->heartbeatTimers[$frame->fd]);
+        }
+        $userId = $this->redis->getUserIdByFd($frame->fd);
+        if (!$userId) {
+            echo "User ID not found for FD {$frame->fd}, disconnecting\n";
+            $server->disconnect($frame->fd, 4002, "User not found");
+            $this->redis->removeUserByFd($frame->fd);
+            return;
+        }
+
+        $this->handleMessage($data, $frame->fd, $userId);
     }
 
     public function onMessage(Server $server, Frame $frame)
@@ -160,7 +211,7 @@ class WebSocketServer
         $fd = $frame->fd;
         $connectionId = $this->redis->getConnectionId($fd);
         if (!$connectionId || !$server->isEstablished($fd)) {
-            // Console::warn("Invalid or closed connection for FD {$fd}");
+            Console::warn("Invalid or closed connection for FD {$fd}");
             $server->disconnect($fd, 4004, "Invalid connection");
             $this->redis->removeUserByFd($fd);
             return;
@@ -178,7 +229,7 @@ class WebSocketServer
 
         $userId = $this->redis->getUserIdByFd($fd);
         if (!$userId) {
-            // Console::warn("User ID not found for FD {$fd}, disconnecting");
+            Console::warn("User ID not found for FD {$fd}, disconnecting");
             $server->disconnect($fd, 4002, "User not found");
             $this->redis->removeUserByFd($fd);
             return;
@@ -186,12 +237,24 @@ class WebSocketServer
 
         $data = json_decode($frame->data, true);
         if (!$data) {
-            // Console::warn("Invalid JSON in message from FD {$fd}");
+            Console::warn("Invalid JSON in message from FD {$fd}");
             return;
         }
 
-        // Console::info("Received message from FD {$fd} (user {$userId}, conn_id {$connectionId}): {$frame->data}");
+        Console::info("Received message from FD {$fd} (user {$userId}, conn_id {$connectionId}): {$frame->data}");
         $this->handleMessage($data, $fd, $userId);
+    }
+
+    public function onCloseOld(Server $server, int $fd)
+    {
+        $userId = $this->redis->getUserIdByFd($fd);
+        if ($userId) {
+            $this->redis->removeUserByFd($fd);
+            $this->redis->cleanupUserConnections($userId);
+            echo "FD {$fd} (user {$userId}) disconnected\n";
+        } else {
+            echo "FD {$fd} disconnected but user not found\n";
+        }
     }
 
     public function onClose(Server $server, int $fd)
@@ -199,10 +262,10 @@ class WebSocketServer
         $userId = $this->redis->getUserIdByFd($fd);
         if ($userId) {
             $this->redis->removeUser($userId, $fd);
-            // Console::info("FD {$fd} (user {$userId}) disconnected and cleaned up");
+            Console::info("FD {$fd} (user {$userId}) disconnected and cleaned up");
         } else {
             $this->redis->removeUserByFd($fd);
-            // Console::debug("FD {$fd} disconnected but no user ID found");
+            Console::debug("FD {$fd} disconnected but no user ID found");
         }
         if (isset($this->heartbeatTimers[$fd])) {
             Timer::clear($this->heartbeatTimers[$fd]);
@@ -221,7 +284,7 @@ class WebSocketServer
                     break;
 
                 case 'process_pending_db_notifications':
-                    // Console::info("Processing pending notifications from database");
+                    Console::info("Processing pending notifications from database");
                     $this->processPendingNotifications();
                     break;
 
@@ -258,6 +321,26 @@ class WebSocketServer
         echo "Task {$taskId} finished with data: " . json_encode($data) . "\n";
     }
 
+    public function setUserFdOld(string $userId, int $newFd): void
+    {
+        $existingFd = $this->redis->getUserFd($userId);
+
+        if ($existingFd) {
+            if ($this->isConnectionActive($existingFd)) {
+                try {
+                    $this->server->disconnect($existingFd, 4003, "New connection established");
+                    //Console::info("Disconnected old FD {$existingFd} for user {$userId}");
+                } catch (\Exception $e) {
+                    //Console::warn("Failed to disconnect old FD {$existingFd}: " . $e->getMessage());
+                }
+            }
+            $this->redis->removeUserByFd($existingFd);
+        }
+
+        $this->redis->setUserFd($userId, $newFd);
+        //Console::info("Established new connection FD {$newFd} for user {$userId}");
+    }
+
     public function setUserFd(string $userId, int $newFd): void
     {
         try {
@@ -266,7 +349,7 @@ class WebSocketServer
                 if ($this->isConnectionActive($existingFd)) {
                     try {
                         $this->server->disconnect($existingFd, 4003, "New connection established");
-                        // Console::info("Disconnected old FD {$existingFd} for user {$userId}");
+                        Console::info("Disconnected old FD {$existingFd} for user {$userId}");
                     } catch (\Exception $e) {
                         Console::warn("Failed to disconnect old FD {$existingFd}: " . $e->getMessage());
                     }
@@ -274,7 +357,7 @@ class WebSocketServer
                 $this->redis->removeUserByFd($existingFd);
             }
             $this->redis->setUserFd($userId, $newFd);
-            // Console::info("Established new connection FD {$newFd} for user {$userId}");
+            Console::info("Established new connection FD {$newFd} for user {$userId}");
         } catch (\Exception $e) {
             Console::error("Error setting FD {$newFd} for user {$userId}: " . $e->getMessage());
         }

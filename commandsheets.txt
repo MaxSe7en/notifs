@@ -1,0 +1,11 @@
+redis-cli MONITOR | grep "GET.*ws:fd_user_map"
+
+
+OPEN PORT
+sudo firewall-cmd --zone=public --add-port=9503/tcp --permanent
+
+
+
+UPDATE gamestable_map
+SET draw_period = CONCAT('dp_', SUBSTRING(draw_storage, 4))
+WHERE draw_storage LIKE 'ds_%';
